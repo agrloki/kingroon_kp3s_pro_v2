@@ -273,7 +273,17 @@ EOF'
 ### Network settings
 
 Now you can reboot your printer by executing reboot command to check if the new module is loading.
-After reboot you can try to connect to a wireless network. Create wpa_supplicant.conf file:
+After reboot you can try to connect to a wireless network.
+
+You can try to connect to Wi-Fi network whith this command:
+```bash
+nmcli dev wifi connect <YOUR_SSID> password <YOUR_PASSWORD>
+```
+Or you can use armbian-config.
+
+Another way which is 100% working on Kingroon default image:
+
+Create wpa_supplicant.conf file:
 
 ```bash
 sudo bash -c 'cat <<EOF >/etc/wpa_supplicant/wpa_supplicant-wlan0.conf
@@ -290,7 +300,7 @@ Enable wpa_supplicant on wlan0 interface:
 sudo systemctl enable wpa_supplicant@wlan0 &&
 sudo systemctl start wpa_supplicant@wlan0
 ```
-Run wpa_cli and enter the following commads:
+Run **wpa_cli** in console and enter the following commads ONE BY ONE finish with <ENTER>:
 ```
 add_network
 set_network 0 ssid "YOUR_SSID"
@@ -315,8 +325,10 @@ Restart networking:
 sudo systemctl restart networking
 ```
 
+
 ### Installation of klipper, moonraker, fluidd
 
+Printer configuration files and systemd unit files you can find [here](files/userpatches/overlay)
 Work under mks user. Clone and use kiauh as described [Here](https://github.com/redrathnure/armbian-mkspi):
 
 ```bash
@@ -633,6 +645,7 @@ Thanks for reading.
         <li>THR plate can be flashed without disassembling</li>
         <li>It has Realtek 8723BS Wi-Fi adapter</li>
         <li>Firmware file name written to SD card for flashing mcu should be cheetah_v2.bin</li>
+        <li>Has a supercapacitor that allows the operating system to shutdown correctly. System is online about 15 sec after switch was turned off. State can be checked by gpioget 2 16 (0 power is on/1 power is off)</li>
       </ul>
     </td>
     <td width="50%" valign="top">
