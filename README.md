@@ -74,11 +74,11 @@ Prepare USB flash drive:
 sudo dd if=$(ls armbian-mkspi/output/images/*.img) of=/dev/sdb bs=1M status=progress && sync
 ```
 And copy armbian image somewhere to root partiotion of this flash drive to have it after booting available.
-Then we need to boot printer from this USB flash drive. Uboot bootloader autoboot process can be interrupted by hiting any key. But it has no bootdelay for that by default. So you need to hiting any key too fast and sometimes it works. To do that you need to start serial communication program like minicom:
+Then we need to boot printer from this USB flash drive. Uboot bootloader autoboot process can be interrupted by hiting any key. But it has no bootdelay for that by default. So you need to hiting any key too fast and sometimes it works. To do that you need to start serial communication program like picocom:
 
 ```bash
+picocom --b 1500000 /dev/ttyUSB0
 
-minicom -b 1500000 -D /dev/ttyUSB0
 ```
 Baud rate should be 1500000 to see booting log corectly.
 Then reboot your printer and start hiting an any key as fast as you can :-) If failed reboot and try to hit faster. You can reboot your printer
@@ -161,12 +161,12 @@ The first login we should do as root and with password 1234 (default for Armbian
 
 Ethernet adapter should work so you can connect it to your router and try to enter with root through ssh if it is not disabled.
 Instead you can use USB type C cable and connect the printer to your PC (usb type-c socket is located on the front panel of the printer).
-Then you can use something like minicom to connect to the serial console of the printer.
-After is everything connected you can turn printer on and start minicom.
+Then you can use something like picocom to connect to the serial console of the printer.
+After is everything connected you can turn printer on and start picocom.
 
 ```bash
+picocom --b 1500000 /dev/ttyUSB0
 
-minicom -b 115200 -D /dev/ttyUSB0
 ```
 
 If everything is go as it should be you can see something like this in a terminal window:
@@ -181,6 +181,8 @@ It will create new user (I used mks with password makerbase as it should be from
 You can try to connect via wireless but for me it doesn't work. So I skiped this stage.
 Now you can set wired connection manually and connect to the printer though ssh. 
 I connected the printer to laptop and use it as a router for the printer.
+
+### Configure wired connection manually
 
 <details>
   <summary>Configure laptop as router and printer as client manually</summary>
@@ -300,7 +302,7 @@ Enable wpa_supplicant on wlan0 interface:
 sudo systemctl enable wpa_supplicant@wlan0 &&
 sudo systemctl start wpa_supplicant@wlan0
 ```
-Run **wpa_cli** in console and enter the following commads ONE BY ONE finish with <ENTER>:
+Run **wpa_cli** in console and enter the following commads ONE BY ONE finish with ENTER:
 ```
 add_network
 set_network 0 ssid "YOUR_SSID"
@@ -444,6 +446,8 @@ make menuconfig
 make
 ```
 
+#### Write firmware image to SD card in printer slot.
+
 <details>
   <summary>Don't want to use external SD card reader or copying files manually?</summary>
 When this article was written it works but later I can't repeat it. It throws an error something like "There is no SD card in the slot".
@@ -523,23 +527,6 @@ After building copy klipper.bin file to SD card with name **cheetah_v2.bin** (fi
 filename should be **cheetah_v2_2.bin**
 Put SD card into printer card slot turn it off and on.
 
-<details>
-  <summary>How to get an actual firmware file name for mcu based on MB</summary>
-  If you have st-link programmer you can use it to dump bootloader and determine firmware file name with strings utility.
-  St-link can be connected to the pins shown on the picture.
-
-  ![SWD pins](./pictures/cheetah_v2_swd_pins.jpg)
-
-Command for openocd should be like this:
-
-```bash
-openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c init -c "reset halt" -c "flash read_bank 0 firmware.bin 0" -c "reset"
-
-```
-Firmware filename can be determined with strings:
-  ![Firmware name](./pictures/firmware_filename.png)
-
-</details>
 
 #### Install binary and systemd unit file:
 
@@ -594,6 +581,91 @@ sudo systemctl start moonraker.service klipper.service
 Check logs in /var/log for errors.
 I didn't copy an old fluidd configuration and macroses but you can do that.
 
+### STLINK
+
+#### How to get firmware file name from bootloader
+
+<details>
+  <summary>Expand</summary>
+  If you have st-link programmer you can use it to dump bootloader and determine firmware file name with strings utility.
+  St-link can be connected to the pins shown on the picture.
+
+  ![SWD pins](./pictures/cheetah_v2_swd_pins.jpg)
+
+Command for openocd should be like this:
+
+```bash
+openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c init -c "reset halt" -c "flash read_bank 0 firmware.bin 0" -c "reset"
+
+```
+Firmware filename can be determined with strings:
+  ![Firmware name](./pictures/firmware_filename.png)
+
+</details>
+
+
+#### How to flash default kingroon bootloader
+
+<details>
+  <summary>Expand</summary>
+
+Full flash image and bootloader image can be found [here](files/firmware).
+Install openocd as a package or from the sources first.
+
+Run openocd:
+```bash
+sudo openocd -f interface/stlink.cfg -f target/stm32f1x.cfg
+```
+This command can be finished with error message something like "wrong ID number".
+It is because there is no stm32f103 on this board it has it's clone. Change ID in stm32f1x.cfg to match this criteria.
+
+In another windown run telnet inside directory where flash or bootloader image is located:
+
+```bash
+telnet 127.0.0.1 4444
+```
+Execute commands in telnet session:
+
+```
+> flash banks
+#0 : stm32f1x.flash (stm32f1x) at 0x08000000, size 0x00000000, buswidth 0, chipwidth 0
+> stm32f1x mass_erase 0
+Target not halted
+stm32x mass erase failed
+> halt
+[stm32f1x.cpu] halted due to debug-request, current mode: Handler HardFault
+xPSR: 0x21000003 pc: 0xfffffffe msp: 0xffffff90
+> stm32f1x mass_erase 0
+timed out waiting for flash
+stm32x mass erase failed
+jtag status contains invalid mode value - communication failure
+Polling target stm32f1x.cpu failed, trying to reexamine
+Examination failed, GDB will be halted. Polling again in 100ms
+Previous state query failed, trying to reconnect
+Polling target stm32f1x.cpu failed, trying to reexamine
+[stm32f1x.cpu] Cortex-M4 r0p1 processor detected
+[stm32f1x.cpu] target has 6 breakpoints, 4 watchpoints
+> flash write_bank 0 firmware.bin
+Padding at 0x08000bd7 with 1 bytes (bank write end alignment)
+wrote 524288 bytes from file firmware.bin to flash bank 0 at offset 0x00000000 in 15.199426s (33.685 KiB/s)
+>reset
+
+```
+After reset it should beep once (bootloader makes this beep).
+</details>
+
+#### Known issues
+
+With stlink connected and powered on virtual end stop of X axis is not working !!!
+
+### Final
+
+Recalibrate mesh and that is all. Now you can uninstall linux-headers to free some space. 
+But it is good to have this package at hand in the target system. Before you turn the bottom cover back recommend you
+to make a backup image of your system as described in the beginning.
+Thanks for reading.
+
+
 ### Additional changes
 
 #### Inverse encoder rotation
@@ -622,12 +694,62 @@ fade_end: 5
 After updating firmware of THR kingroon menu will dissapear. You can turn it back by comparing menu.cfg file from the image with the new one.
 But don't edit it. You can put chages inside your printer.cfg file. Except one function. Kingroon added IP determination as a python code.
 
-### Final
+#### LEDs
 
-Recalibrate mesh and that is all. Now you can uninstall linux-headers to free some space. 
-But it is good to have this package at hand in the target system. Before you turn the bottom cover back recommend you
-to make a backup image of your system as described in the beginning.
-Thanks for reading.
+There is a chain of three WS2812 on display PCB and you can use it for your needs like printer status signalization.
+You can check leds.cfg as example. Printer changes it's color during homing/printing/heating etc.
+
+
+### Additional information
+
+#### rp2040 GPIO
+
+<details>
+  <summary>Expand</summary>
+
+![GPIO layout](./pictures/gpio.jpg)
+
+Configure this gpio as output_pin and you can check it with set_pin g-command
+
+```
+[output_pin gpio11]
+pin: MKS_THR:gpio11
+
+[output_pin gpio29]
+pin: MKS_THR:gpio29
+
+```
+
+```
+set_pin pin=gpio11 value=1
+```
+</details>
+
+### Heatbreak cooler controller.
+
+<details>
+  <summary>Expand</summary>
+  THR v1.0 plate has no mosfet for heatbreak cooler. You can install it by yourself as shown on the pictures below.
+  I bought a mosfet module for Arduino cut it and solder it directly to GND 5V S pins.
+  WARNING!!! 5V and S holes on mosfet module PCB are connected together. This connection should be broken before soldering.
+  Pins GND Z+ should be cut as short as possible.
+
+  ![Module](./pictures/mosfet/1.jpg)
+  ![Cutting](./pictures/mosfet/2.jpg)
+  ![Ready](./pictures/mosfet/3.jpg)
+  ![Assembled](./pictures/mosfet/4.jpg)
+
+After everything is assembled, it is enough to add the following to the printer config:
+
+```
+[heater_fan heatbreak_cooling_fan]
+pin: MKS_THR:gpio11
+heater: extruder
+heater_temp: 50.0
+```
+</details>
+
+
 
 ### Difference between V2 hardware
 
